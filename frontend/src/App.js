@@ -124,6 +124,18 @@ function App() {
                   secondary={analysis.metrics.action_verbs_found}
                 />
               </ListItem>
+              <ListItem>
+                <ListItemText
+                  primary="Technical Skills Found"
+                  secondary={analysis.metrics.technical_skills_found}
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemText
+                  primary="Passive Voice Sentences"
+                  secondary={analysis.metrics.passive_voice_sentences}
+                />
+              </ListItem>
             </List>
 
             <Divider sx={{ my: 2 }} />

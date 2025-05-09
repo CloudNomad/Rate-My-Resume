@@ -2,7 +2,7 @@ from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import fitz
 import spacy
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 import json
 from functools import lru_cache
 import asyncio
@@ -10,6 +10,7 @@ import os
 import re
 from dotenv import load_dotenv
 from pydantic import BaseModel
+from collections import defaultdict
 
 load_dotenv()
 
@@ -40,6 +41,50 @@ class ResumeSection(BaseModel):
     content: str
     score: float
     suggestions: List[str]
+    details: Dict[str, any] = {}
+
+# Industry-specific keywords and skills
+INDUSTRY_KEYWORDS = {
+    'software_engineering': {
+        'keywords': ['software', 'development', 'engineering', 'programming', 'coding'],
+        'skills': {
+            'programming': ['python', 'javascript', 'java', 'c++', 'ruby', 'go', 'rust', 'typescript', 'swift', 'kotlin'],
+            'frameworks': ['react', 'angular', 'vue', 'django', 'flask', 'spring', 'express', 'node.js', 'laravel', 'asp.net'],
+            'databases': ['sql', 'mysql', 'postgresql', 'mongodb', 'redis', 'cassandra', 'elasticsearch'],
+            'cloud': ['aws', 'azure', 'gcp', 'docker', 'kubernetes', 'terraform', 'ansible'],
+            'tools': ['git', 'jenkins', 'jira', 'confluence', 'github', 'gitlab', 'bitbucket']
+        }
+    },
+    'data_science': {
+        'keywords': ['data', 'analytics', 'machine learning', 'ai', 'statistics'],
+        'skills': {
+            'programming': ['python', 'r', 'sql', 'scala', 'julia'],
+            'libraries': ['pandas', 'numpy', 'scikit-learn', 'tensorflow', 'pytorch', 'keras'],
+            'tools': ['jupyter', 'tableau', 'power bi', 'spark', 'hadoop'],
+            'techniques': ['regression', 'classification', 'clustering', 'nlp', 'computer vision']
+        }
+    },
+    'product_management': {
+        'keywords': ['product', 'management', 'strategy', 'roadmap', 'agile'],
+        'skills': {
+            'methodologies': ['agile', 'scrum', 'kanban', 'waterfall'],
+            'tools': ['jira', 'confluence', 'figma', 'productboard', 'amplitude'],
+            'concepts': ['user stories', 'mvp', 'product lifecycle', 'market research']
+        }
+    }
+}
+
+# Achievement metrics patterns
+ACHIEVEMENT_PATTERNS = {
+    'percentage': r'\d+%',
+    'monetary': r'\$\d+(?:\.\d+)?(?:K|M|B)?',
+    'time': r'\d+(?:x|times)',
+    'reduction': r'\d+% reduction|\d+% decrease',
+    'increase': r'\d+% increase|\d+% growth',
+    'scale': r'\d+(?:K|M|B) users|\d+(?:K|M|B) customers',
+    'efficiency': r'\d+% efficiency|\d+% improvement',
+    'cost': r'\$\d+(?:K|M|B)? savings|\$\d+(?:K|M|B)? reduction'
+}
 
 def validate_pdf(file: UploadFile) -> None:
     if not file.filename.endswith('.pdf'):
@@ -62,7 +107,10 @@ def detect_sections(text: str) -> Dict[str, str]:
         'experience': r'(?i)(experience|work|employment|professional)',
         'skills': r'(?i)(skills|technical|competencies)',
         'projects': r'(?i)(projects|portfolio)',
-        'contact': r'(?i)(contact|email|phone|address)'
+        'contact': r'(?i)(contact|email|phone|address)',
+        'summary': r'(?i)(summary|profile|objective)',
+        'certifications': r'(?i)(certifications|certificates|accreditations)',
+        'languages': r'(?i)(languages|language proficiency)'
     }
     
     sections = {}
@@ -95,60 +143,76 @@ def detect_sections(text: str) -> Dict[str, str]:
     
     return sections
 
-def analyze_section(section_name: str, content: str) -> ResumeSection:
-    doc = nlp(content)
+def detect_industry(text: str) -> str:
+    max_matches = 0
+    detected_industry = 'general'
     
-    # Section-specific analysis
-    if section_name == 'skills':
-        return analyze_skills_section(content)
-    elif section_name == 'experience':
-        return analyze_experience_section(content)
-    elif section_name == 'education':
-        return analyze_education_section(content)
-    elif section_name == 'contact':
-        return analyze_contact_section(content)
+    for industry, data in INDUSTRY_KEYWORDS.items():
+        matches = sum(1 for keyword in data['keywords'] if keyword.lower() in text.lower())
+        if matches > max_matches:
+            max_matches = matches
+            detected_industry = industry
     
-    # Default analysis
-    return ResumeSection(
-        title=section_name,
-        content=content,
-        score=0.0,
-        suggestions=[]
-    )
+    return detected_industry
 
-def analyze_skills_section(content: str) -> ResumeSection:
-    # Technical skills database
-    tech_skills = {
-        'programming': ['python', 'javascript', 'java', 'c++', 'ruby', 'go', 'rust'],
-        'frameworks': ['react', 'angular', 'vue', 'django', 'flask', 'spring', 'express'],
-        'databases': ['sql', 'mysql', 'postgresql', 'mongodb', 'redis'],
-        'cloud': ['aws', 'azure', 'gcp', 'docker', 'kubernetes'],
-        'tools': ['git', 'jenkins', 'jira', 'confluence']
-    }
+def analyze_achievements(content: str) -> Dict[str, List[str]]:
+    achievements = defaultdict(list)
     
-    found_skills = []
-    missing_skills = []
+    for metric_type, pattern in ACHIEVEMENT_PATTERNS.items():
+        matches = re.finditer(pattern, content, re.IGNORECASE)
+        for match in matches:
+            context = content[max(0, match.start() - 50):min(len(content), match.end() + 50)]
+            achievements[metric_type].append({
+                'value': match.group(),
+                'context': context.strip()
+            })
     
-    for category, skills in tech_skills.items():
+    return dict(achievements)
+
+def analyze_skills_section(content: str, industry: str = 'software_engineering') -> ResumeSection:
+    industry_data = INDUSTRY_KEYWORDS.get(industry, INDUSTRY_KEYWORDS['software_engineering'])
+    skills_data = industry_data['skills']
+    
+    found_skills = defaultdict(list)
+    missing_skills = defaultdict(list)
+    
+    for category, skills in skills_data.items():
         for skill in skills:
             if skill in content.lower():
-                found_skills.append(skill)
+                found_skills[category].append(skill)
             else:
-                missing_skills.append(skill)
+                missing_skills[category].append(skill)
     
-    score = min(100, len(found_skills) * 10)
+    # Calculate category scores
+    category_scores = {}
+    for category in skills_data.keys():
+        if category in found_skills:
+            category_scores[category] = min(100, len(found_skills[category]) * 20)
+        else:
+            category_scores[category] = 0
+    
+    # Calculate overall score
+    score = min(100, sum(category_scores.values()) / len(category_scores))
+    
     suggestions = []
-    
-    if len(found_skills) < 5:
+    if len(found_skills) < 3:
         suggestions.append("Add more technical skills to strengthen your profile")
-    if missing_skills:
-        suggestions.append(f"Consider adding these in-demand skills: {', '.join(missing_skills[:3])}")
+    
+    # Category-specific suggestions
+    for category, skills in missing_skills.items():
+        if len(found_skills.get(category, [])) < 2:
+            suggestions.append(f"Consider adding more {category} skills: {', '.join(skills[:3])}")
     
     return ResumeSection(
         title="Skills",
         content=content,
         score=score,
-        suggestions=suggestions
+        suggestions=suggestions,
+        details={
+            'found_skills': dict(found_skills),
+            'missing_skills': dict(missing_skills),
+            'category_scores': category_scores
+        }
     )
 
 def analyze_experience_section(content: str) -> ResumeSection:
@@ -156,26 +220,30 @@ def analyze_experience_section(content: str) -> ResumeSection:
     
     # Action verbs analysis
     action_verbs = ["developed", "created", "implemented", "managed", "led", "increased", 
-                   "improved", "achieved", "delivered", "optimized", "designed", "architected"]
+                   "improved", "achieved", "delivered", "optimized", "designed", "architected",
+                   "launched", "initiated", "coordinated", "facilitated", "established",
+                   "enhanced", "streamlined", "revolutionized", "pioneered", "spearheaded"]
+    
     found_verbs = [token.text.lower() for token in doc if token.text.lower() in action_verbs]
     
-    # Metrics and achievements
-    metrics_pattern = r'\d+%|\$\d+|\d+x|\d+% increase|\d+% reduction'
-    metrics = re.findall(metrics_pattern, content)
+    # Analyze achievements
+    achievements = analyze_achievements(content)
     
     # Passive voice detection
     passive_voice = [sent.text for sent in doc.sents if any(token.dep_ == "auxpass" for token in sent)]
     
-    score = min(100, (
-        len(found_verbs) * 5 +    # Action verbs
-        len(metrics) * 10 +       # Quantifiable achievements
-        -len(passive_voice) * 5   # Penalty for passive voice
-    ))
+    # Calculate scores for different aspects
+    verb_score = min(100, len(found_verbs) * 5)
+    achievement_score = min(100, sum(len(achievements[metric]) for metric in achievements) * 10)
+    passive_penalty = len(passive_voice) * 5
+    
+    # Overall score
+    score = min(100, (verb_score + achievement_score - passive_penalty))
     
     suggestions = []
     if len(found_verbs) < 3:
         suggestions.append("Add more action verbs to describe your achievements")
-    if len(metrics) < 2:
+    if not any(len(achievements[metric]) > 0 for metric in achievements):
         suggestions.append("Include more quantifiable achievements and metrics")
     if passive_voice:
         suggestions.append("Consider rewriting passive voice sentences to be more impactful")
@@ -184,7 +252,17 @@ def analyze_experience_section(content: str) -> ResumeSection:
         title="Experience",
         content=content,
         score=score,
-        suggestions=suggestions
+        suggestions=suggestions,
+        details={
+            'action_verbs': found_verbs,
+            'achievements': achievements,
+            'passive_voice': passive_voice,
+            'aspect_scores': {
+                'action_verbs': verb_score,
+                'achievements': achievement_score,
+                'passive_voice_penalty': passive_penalty
+            }
+        }
     )
 
 def analyze_education_section(content: str) -> ResumeSection:
@@ -196,9 +274,20 @@ def analyze_education_section(content: str) -> ResumeSection:
     date_pattern = r'\d{4}'
     dates = re.findall(date_pattern, content)
     
+    # GPA detection
+    gpa_pattern = r'(?:GPA|gpa)[:\s]*(\d+\.\d+)'
+    gpa_match = re.search(gpa_pattern, content)
+    gpa = float(gpa_match.group(1)) if gpa_match else None
+    
+    # Degree detection
+    degree_pattern = r'(?:Bachelor|Master|PhD|B\.S\.|M\.S\.|B\.A\.|M\.A\.)[\w\s]*'
+    degrees = re.findall(degree_pattern, content)
+    
     score = min(100, (
         len(found_keywords) * 10 +  # Education keywords
-        len(dates) * 5             # Dates found
+        len(dates) * 5 +           # Dates found
+        (20 if gpa else 0) +       # GPA bonus
+        len(degrees) * 15          # Degree bonus
     ))
     
     suggestions = []
@@ -206,12 +295,22 @@ def analyze_education_section(content: str) -> ResumeSection:
         suggestions.append("Add more details about your educational background")
     if len(dates) < 2:
         suggestions.append("Include graduation dates for your degrees")
+    if not gpa and 'gpa' not in content.lower():
+        suggestions.append("Consider adding your GPA if it's above 3.0")
+    if not degrees:
+        suggestions.append("Specify your degree(s) clearly")
     
     return ResumeSection(
         title="Education",
         content=content,
         score=score,
-        suggestions=suggestions
+        suggestions=suggestions,
+        details={
+            'degrees': degrees,
+            'dates': dates,
+            'gpa': gpa,
+            'found_keywords': found_keywords
+        }
     )
 
 def analyze_contact_section(content: str) -> ResumeSection:
@@ -219,15 +318,21 @@ def analyze_contact_section(content: str) -> ResumeSection:
     email_pattern = r'[\w\.-]+@[\w\.-]+\.\w+'
     phone_pattern = r'\+?1?\s*\(?[0-9]{3}\)?[-.\s]?[0-9]{3}[-.\s]?[0-9]{4}'
     linkedin_pattern = r'linkedin\.com/in/[\w-]+'
+    github_pattern = r'github\.com/[\w-]+'
+    portfolio_pattern = r'(?:https?://)?(?:www\.)?[\w-]+\.(?:com|io|dev|app)'
     
     email = re.search(email_pattern, content)
     phone = re.search(phone_pattern, content)
     linkedin = re.search(linkedin_pattern, content)
+    github = re.search(github_pattern, content)
+    portfolio = re.search(portfolio_pattern, content)
     
     score = min(100, (
-        bool(email) * 30 +
-        bool(phone) * 30 +
-        bool(linkedin) * 40
+        bool(email) * 25 +
+        bool(phone) * 25 +
+        bool(linkedin) * 20 +
+        bool(github) * 15 +
+        bool(portfolio) * 15
     ))
     
     suggestions = []
@@ -237,19 +342,33 @@ def analyze_contact_section(content: str) -> ResumeSection:
         suggestions.append("Include your phone number")
     if not linkedin:
         suggestions.append("Add your LinkedIn profile URL")
+    if not github:
+        suggestions.append("Consider adding your GitHub profile")
+    if not portfolio:
+        suggestions.append("Add your portfolio website if available")
     
     return ResumeSection(
         title="Contact",
         content=content,
         score=score,
-        suggestions=suggestions
+        suggestions=suggestions,
+        details={
+            'email': email.group() if email else None,
+            'phone': phone.group() if phone else None,
+            'linkedin': linkedin.group() if linkedin else None,
+            'github': github.group() if github else None,
+            'portfolio': portfolio.group() if portfolio else None
+        }
     )
 
 @lru_cache(maxsize=int(os.getenv('CACHE_SIZE', 100)))
 def analyze_resume(text: str) -> Dict:
+    # Detect industry
+    industry = detect_industry(text)
+    
     # Detect and analyze sections
     sections = detect_sections(text)
-    section_analyses = {name: analyze_section(name, content) for name, content in sections.items()}
+    section_analyses = {name: analyze_section(name, content, industry) for name, content in sections.items()}
     
     # Calculate overall score
     overall_score = sum(section.score for section in section_analyses.values()) / len(section_analyses)
@@ -271,10 +390,12 @@ def analyze_resume(text: str) -> Dict:
     
     return {
         "score": round(overall_score, 1),
+        "industry": industry,
         "sections": {
             name: {
                 "score": section.score,
-                "suggestions": section.suggestions
+                "suggestions": section.suggestions,
+                "details": section.details
             }
             for name, section in section_analyses.items()
         },

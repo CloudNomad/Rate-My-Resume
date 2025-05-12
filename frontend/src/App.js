@@ -10,6 +10,12 @@ import {
   ListItem,
   ListItemText,
   Divider,
+  TextField,
+  Grid,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import { Upload as UploadIcon } from '@mui/icons-material';
 import axios from 'axios';
@@ -19,10 +25,24 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState(null);
   const [error, setError] = useState(null);
+  const [userInfo, setUserInfo] = useState({
+    name: '',
+    email: '',
+    experience: '',
+    targetRole: '',
+    practiceQuestions: '',
+  });
 
   const handleFileChange = (event) => {
     setFile(event.target.files[0]);
     setError(null);
+  };
+
+  const handleUserInfoChange = (field) => (event) => {
+    setUserInfo({
+      ...userInfo,
+      [field]: event.target.value,
+    });
   };
 
   const handleUpload = async () => {
@@ -174,6 +194,81 @@ function App() {
             </List>
           </Paper>
         )}
+
+        <Paper sx={{ p: 3 }}>
+          <Typography variant="h5" gutterBottom>
+            Your Information
+          </Typography>
+          <Grid container spacing={3}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Name"
+                value={userInfo.name}
+                onChange={handleUserInfoChange('name')}
+                margin="normal"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Email"
+                type="email"
+                value={userInfo.email}
+                onChange={handleUserInfoChange('email')}
+                margin="normal"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <FormControl fullWidth margin="normal">
+                <InputLabel>Years of Experience</InputLabel>
+                <Select
+                  value={userInfo.experience}
+                  onChange={handleUserInfoChange('experience')}
+                  label="Years of Experience"
+                >
+                  <MenuItem value="0-1">0-1 years</MenuItem>
+                  <MenuItem value="1-3">1-3 years</MenuItem>
+                  <MenuItem value="3-5">3-5 years</MenuItem>
+                  <MenuItem value="5-10">5-10 years</MenuItem>
+                  <MenuItem value="10+">10+ years</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Target Role"
+                value={userInfo.targetRole}
+                onChange={handleUserInfoChange('targetRole')}
+                margin="normal"
+                placeholder="e.g., Software Engineer, Product Manager"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Practice Questions"
+                value={userInfo.practiceQuestions}
+                onChange={handleUserInfoChange('practiceQuestions')}
+                margin="normal"
+                multiline
+                rows={4}
+                placeholder="Enter any specific questions or areas you'd like to practice"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <Button
+                variant="contained"
+                color="primary"
+                fullWidth
+                onClick={() => console.log('User info:', userInfo)}
+              >
+                Save Information
+              </Button>
+            </Grid>
+          </Grid>
+        </Paper>
       </Box>
     </Container>
   );

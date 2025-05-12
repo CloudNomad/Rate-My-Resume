@@ -31,7 +31,58 @@ function App() {
     experience: '',
     targetRole: '',
     practiceQuestions: '',
+    selectedQuestions: [],
   });
+
+  const interviewQuestions = {
+    technical: {
+      'Software Engineering': [
+        'Explain the difference between REST and GraphQL',
+        'How would you design a scalable database system?',
+        'Explain the concept of microservices architecture',
+        'How do you handle race conditions in concurrent programming?',
+        'Explain the SOLID principles'
+      ],
+      'Data Science': [
+        'Explain the difference between supervised and unsupervised learning',
+        'How would you handle missing data in a dataset?',
+        'Explain the concept of overfitting and how to prevent it',
+        'Describe a time you used machine learning to solve a business problem',
+        'How do you evaluate the performance of a model?'
+      ],
+      'Product Management': [
+        'How do you prioritize features in a product roadmap?',
+        'Describe your approach to user research',
+        'How do you measure product success?',
+        'Explain your process for gathering and implementing user feedback',
+        'How do you handle competing stakeholder requirements?'
+      ]
+    },
+    behavioral: [
+      'Tell me about a time you faced a difficult challenge at work',
+      'Describe a situation where you had to work with a difficult team member',
+      'How do you handle tight deadlines and pressure?',
+      'Tell me about a time you had to make a difficult decision',
+      'Describe a project where you had to learn something new quickly'
+    ],
+    company: {
+      'Google': [
+        'How would you design a parking lot?',
+        'Explain how you would implement a search engine',
+        'How would you design a system to handle millions of concurrent users?'
+      ],
+      'Amazon': [
+        'Tell me about a time you had to deal with ambiguity',
+        'How do you handle customer complaints?',
+        'Describe a time you had to make a data-driven decision'
+      ],
+      'Microsoft': [
+        'How would you design a file system?',
+        'Explain your approach to debugging complex issues',
+        'How do you stay updated with new technologies?'
+      ]
+    }
+  };
 
   const handleFileChange = (event) => {
     setFile(event.target.files[0]);
@@ -43,6 +94,15 @@ function App() {
       ...userInfo,
       [field]: event.target.value,
     });
+  };
+
+  const handleQuestionToggle = (question) => {
+    setUserInfo(prev => ({
+      ...prev,
+      selectedQuestions: prev.selectedQuestions.includes(question)
+        ? prev.selectedQuestions.filter(q => q !== question)
+        : [...prev.selectedQuestions, question]
+    }));
   };
 
   const handleUpload = async () => {
@@ -246,16 +306,109 @@ function App() {
               />
             </Grid>
             <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Practice Questions"
-                value={userInfo.practiceQuestions}
-                onChange={handleUserInfoChange('practiceQuestions')}
-                margin="normal"
-                multiline
-                rows={4}
-                placeholder="Enter any specific questions or areas you'd like to practice"
-              />
+              <Typography variant="h6" gutterBottom>
+                Practice Questions
+              </Typography>
+              <FormControl fullWidth margin="normal">
+                <InputLabel>Question Category</InputLabel>
+                <Select
+                  value={userInfo.targetRole || ''}
+                  onChange={handleUserInfoChange('targetRole')}
+                  label="Question Category"
+                >
+                  <MenuItem value="Software Engineering">Software Engineering</MenuItem>
+                  <MenuItem value="Data Science">Data Science</MenuItem>
+                  <MenuItem value="Product Management">Product Management</MenuItem>
+                </Select>
+              </FormControl>
+              
+              {userInfo.targetRole && (
+                <>
+                  <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
+                    Technical Questions
+                  </Typography>
+                  <List>
+                    {interviewQuestions.technical[userInfo.targetRole]?.map((question, index) => (
+                      <ListItem key={`tech-${index}`}>
+                        <ListItemText
+                          primary={question}
+                          secondary={
+                            <Button
+                              size="small"
+                              onClick={() => handleQuestionToggle(question)}
+                              color={userInfo.selectedQuestions.includes(question) ? "primary" : "default"}
+                            >
+                              {userInfo.selectedQuestions.includes(question) ? "Selected" : "Select"}
+                            </Button>
+                          }
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+
+                  <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
+                    Behavioral Questions
+                  </Typography>
+                  <List>
+                    {interviewQuestions.behavioral.map((question, index) => (
+                      <ListItem key={`behav-${index}`}>
+                        <ListItemText
+                          primary={question}
+                          secondary={
+                            <Button
+                              size="small"
+                              onClick={() => handleQuestionToggle(question)}
+                              color={userInfo.selectedQuestions.includes(question) ? "primary" : "default"}
+                            >
+                              {userInfo.selectedQuestions.includes(question) ? "Selected" : "Select"}
+                            </Button>
+                          }
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+
+                  <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
+                    Company-Specific Questions
+                  </Typography>
+                  <List>
+                    {Object.entries(interviewQuestions.company).map(([company, questions]) => (
+                      <React.Fragment key={company}>
+                        <Typography variant="subtitle2" sx={{ mt: 1, mb: 0.5 }}>
+                          {company}
+                        </Typography>
+                        {questions.map((question, index) => (
+                          <ListItem key={`${company}-${index}`}>
+                            <ListItemText
+                              primary={question}
+                              secondary={
+                                <Button
+                                  size="small"
+                                  onClick={() => handleQuestionToggle(question)}
+                                  color={userInfo.selectedQuestions.includes(question) ? "primary" : "default"}
+                                >
+                                  {userInfo.selectedQuestions.includes(question) ? "Selected" : "Select"}
+                                </Button>
+                              }
+                            />
+                          </ListItem>
+                        ))}
+                      </React.Fragment>
+                    ))}
+                  </List>
+
+                  <Typography variant="subtitle1" sx={{ mt: 2, mb: 1 }}>
+                    Selected Questions ({userInfo.selectedQuestions.length})
+                  </Typography>
+                  <List>
+                    {userInfo.selectedQuestions.map((question, index) => (
+                      <ListItem key={`selected-${index}`}>
+                        <ListItemText primary={question} />
+                      </ListItem>
+                    ))}
+                  </List>
+                </>
+              )}
             </Grid>
             <Grid item xs={12}>
               <Button

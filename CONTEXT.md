@@ -52,6 +52,21 @@ User → Upload Resume → Backend (Flask/FastAPI) → Analyze with NLP → Scor
    - Weaknesses
    - Suggestions for improvement
 
+## 📤 Upload Features
+### Resume Upload
+- Support for PDF and DOCX formats
+- Max file size: 5MB
+- Automatic text extraction and formatting
+- Progress indicator during upload
+- Error handling for invalid files
+
+### Flash Cards
+- Create custom flash cards for interview prep
+- Upload existing flash card sets (CSV/JSON)
+- Export flash cards to PDF/CSV
+- Share flash card sets with other users
+- Track learning progress
+
 ## 🌟 Success Criteria
 - Users should receive feedback within **5 seconds** of upload.
 - Resume score should feel **logical and explainable**.

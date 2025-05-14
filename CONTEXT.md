@@ -80,6 +80,37 @@ User → Upload Resume → Backend (Flask/FastAPI) → Analyze with NLP → Scor
 - Add LinkedIn profile scanner feature.
 - Build a "before and after" resume comparison tool.
 
+### Advanced Features
+- **AI Interview Prep**
+  - Mock interview sessions with AI
+  - Industry-specific question banks
+  - Real-time feedback on responses
+  - Voice analysis for communication skills
+
+- **Career Path Planning**
+  - Skill gap analysis
+  - Learning roadmap generation
+  - Industry trend insights
+  - Salary range predictions
+
+- **Networking Tools**
+  - Professional event recommendations
+  - Industry contact suggestions
+  - Connection request templates
+  - Follow-up email generators
+
+- **Portfolio Builder**
+  - Project showcase templates
+  - GitHub integration
+  - Live demo hosting
+  - Performance metrics tracking
+
+- **Job Application Tracker**
+  - Application status dashboard
+  - Interview scheduling
+  - Company research integration
+  - Automated follow-ups
+
 # 🚀 Goal for GitHub Commits
 - **Daily commits** showing frontend, backend, NLP, and deployment progress.
 - Use clean **branching**: e.g., `feature/upload`, `feature/scoring-system`, `feature/suggestions-ui`.

@@ -74,6 +74,20 @@ User → Upload Resume → Backend (Flask/FastAPI) → Analyze with NLP → Scor
 - Mobile-responsive and clean UI.
 - No server crashes with 5+ simultaneous users.
 
+### Security Requirements
+- End-to-end encryption for file uploads
+- Rate limiting on API endpoints
+- Secure password hashing
+- JWT-based authentication
+- Regular security audits
+
+### Performance Metrics
+- Page load time < 2s
+- API response time < 500ms
+- 99.9% uptime
+- Support for 1000+ concurrent users
+- Automatic scaling based on load
+
 ## 📈 Potential Future Extensions
 - Match resume directly to job descriptions (JD matching).
 - Suggest better phrasing using GPT APIs.

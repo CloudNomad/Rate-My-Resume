@@ -26,8 +26,11 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
-import { Upload as UploadIcon } from '@mui/icons-material';
+import { Upload as UploadIcon, ExpandMore as ExpandMoreIcon, Code as CodeIcon } from '@mui/icons-material';
 import axios from 'axios';
 
 function App() {
@@ -49,6 +52,9 @@ function App() {
     practiceQuestions: '',
     selectedQuestions: [],
   });
+  const [devMode] = useState(process.env.REACT_APP_DEV_MODE === 'true');
+  const [testDataCount, setTestDataCount] = useState(5);
+  const [showDevPanel, setShowDevPanel] = useState(false);
 
   const interviewQuestions = {
     technical: {
@@ -198,6 +204,25 @@ function App() {
     }
   };
 
+  const handleGenerateTestData = async () => {
+    try {
+      const response = await axios.post(`http://localhost:8000/dev/generate-test-data?count=${testDataCount}`);
+      setUserId(response.data.user_id);
+      fetchVersions();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to generate test data');
+    }
+  };
+
+  const handleClearTestData = async () => {
+    try {
+      await axios.delete('http://localhost:8000/dev/clear-test-data');
+      setVersions([]);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to clear test data');
+    }
+  };
+
   useEffect(() => {
     fetchVersions();
   }, []);
@@ -205,9 +230,59 @@ function App() {
   return (
     <Container maxWidth="md">
       <Box sx={{ my: 4 }}>
-        <Typography variant="h3" component="h1" gutterBottom align="center">
-          Rate My Resume
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h3" component="h1" gutterBottom>
+            Rate My Resume
+          </Typography>
+          {devMode && (
+            <Button
+              variant="outlined"
+              color="secondary"
+              startIcon={<CodeIcon />}
+              onClick={() => setShowDevPanel(!showDevPanel)}
+            >
+              Dev Panel
+            </Button>
+          )}
+        </Box>
+
+        {devMode && showDevPanel && (
+          <Paper sx={{ p: 3, mb: 3 }}>
+            <Typography variant="h5" gutterBottom>
+              Developer Panel
+            </Typography>
+            <Grid container spacing={3}>
+              <Grid item xs={12} sm={6}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Number of Test Versions"
+                  value={testDataCount}
+                  onChange={(e) => setTestDataCount(parseInt(e.target.value))}
+                  inputProps={{ min: 1, max: 10 }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={6}>
+                <Box sx={{ display: 'flex', gap: 2 }}>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={handleGenerateTestData}
+                  >
+                    Generate Test Data
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    onClick={handleClearTestData}
+                  >
+                    Clear Test Data
+                  </Button>
+                </Box>
+              </Grid>
+            </Grid>
+          </Paper>
+        )}
 
         <Paper sx={{ p: 3, mb: 3 }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>

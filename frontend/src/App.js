@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Container,
   Box,
@@ -16,6 +16,16 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
 } from '@mui/material';
 import { Upload as UploadIcon } from '@mui/icons-material';
 import axios from 'axios';
@@ -25,6 +35,12 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [analysis, setAnalysis] = useState(null);
   const [error, setError] = useState(null);
+  const [versions, setVersions] = useState([]);
+  const [showVersionDialog, setShowVersionDialog] = useState(false);
+  const [versionName, setVersionName] = useState('');
+  const [selectedVersions, setSelectedVersions] = useState([]);
+  const [comparison, setComparison] = useState(null);
+  const [userId] = useState('user_' + Math.random().toString(36).substr(2, 9));
   const [userInfo, setUserInfo] = useState({
     name: '',
     email: '',
@@ -129,6 +145,63 @@ function App() {
     }
   };
 
+  const handleSaveVersion = async () => {
+    if (!file) return;
+    
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('user_id', userId);
+    formData.append('version_name', versionName);
+
+    try {
+      const response = await axios.post('http://localhost:8000/save-version', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      setShowVersionDialog(false);
+      setVersionName('');
+      fetchVersions();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to save version');
+    }
+  };
+
+  const fetchVersions = async () => {
+    try {
+      const response = await axios.get(`http://localhost:8000/versions/${userId}`);
+      setVersions(response.data);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to fetch versions');
+    }
+  };
+
+  const handleCompareVersions = async () => {
+    if (selectedVersions.length !== 2) return;
+    
+    try {
+      const response = await axios.get(
+        `http://localhost:8000/compare/${selectedVersions[0]}/${selectedVersions[1]}`
+      );
+      setComparison(response.data);
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to compare versions');
+    }
+  };
+
+  const handleDeleteVersion = async (versionId) => {
+    try {
+      await axios.delete(`http://localhost:8000/versions/${versionId}`);
+      fetchVersions();
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to delete version');
+    }
+  };
+
+  useEffect(() => {
+    fetchVersions();
+  }, []);
+
   return (
     <Container maxWidth="md">
       <Box sx={{ my: 4 }}>
@@ -177,10 +250,19 @@ function App() {
         )}
 
         {analysis && (
-          <Paper sx={{ p: 3 }}>
-            <Typography variant="h4" gutterBottom>
-              Resume Score: {analysis.score}/100
-            </Typography>
+          <Paper sx={{ p: 3, mb: 3 }}>
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h4">
+                Resume Score: {analysis.score}/100
+              </Typography>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={() => setShowVersionDialog(true)}
+              >
+                Save Version
+              </Button>
+            </Box>
             
             <Typography variant="h6" gutterBottom sx={{ mt: 3 }}>
               Metrics
@@ -422,6 +504,130 @@ function App() {
             </Grid>
           </Grid>
         </Paper>
+
+        <Paper sx={{ p: 3, mb: 3 }}>
+          <Typography variant="h5" gutterBottom>
+            Resume Versions
+          </Typography>
+          <TableContainer>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Version Name</TableCell>
+                  <TableCell>Score</TableCell>
+                  <TableCell>Date</TableCell>
+                  <TableCell>Actions</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {versions.map((version) => (
+                  <TableRow key={version.id}>
+                    <TableCell>{version.version_name}</TableCell>
+                    <TableCell>{version.score}</TableCell>
+                    <TableCell>
+                      {new Date(version.created_at).toLocaleDateString()}
+                    </TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Button
+                          size="small"
+                          onClick={() => {
+                            setSelectedVersions(prev => {
+                              const newSelection = prev.includes(version.id)
+                                ? prev.filter(id => id !== version.id)
+                                : [...prev, version.id].slice(-2);
+                              return newSelection;
+                            });
+                          }}
+                          color={selectedVersions.includes(version.id) ? "secondary" : "primary"}
+                        >
+                          {selectedVersions.includes(version.id) ? "Deselect" : "Select for Compare"}
+                        </Button>
+                        <Button
+                          size="small"
+                          color="error"
+                          onClick={() => {
+                            if (window.confirm('Are you sure you want to delete this version?')) {
+                              handleDeleteVersion(version.id);
+                            }
+                          }}
+                        >
+                          Delete
+                        </Button>
+                      </Box>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+          
+          {selectedVersions.length === 2 && (
+            <Box sx={{ mt: 2 }}>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleCompareVersions}
+              >
+                Compare Selected Versions
+              </Button>
+            </Box>
+          )}
+        </Paper>
+
+        {comparison && (
+          <Paper sx={{ p: 3 }}>
+            <Typography variant="h5" gutterBottom>
+              Version Comparison
+            </Typography>
+            <List>
+              <ListItem>
+                <ListItemText
+                  primary="Score Difference"
+                  secondary={`${comparison.score_difference > 0 ? '+' : ''}${comparison.score_difference.toFixed(1)}`}
+                />
+              </ListItem>
+              <ListItem>
+                <ListItemText
+                  primary="Time Between Versions"
+                  secondary={`${Math.round(comparison.created_at_difference / 86400)} days`}
+                />
+              </ListItem>
+              <Divider />
+              <Typography variant="h6" sx={{ mt: 2, mb: 1 }}>
+                Section Changes
+              </Typography>
+              {Object.entries(comparison.section_changes).map(([section, change]) => (
+                <ListItem key={section}>
+                  <ListItemText
+                    primary={section}
+                    secondary={change}
+                  />
+                </ListItem>
+              ))}
+            </List>
+          </Paper>
+        )}
+
+        <Dialog open={showVersionDialog} onClose={() => setShowVersionDialog(false)}>
+          <DialogTitle>Save Resume Version</DialogTitle>
+          <DialogContent>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Version Name"
+              fullWidth
+              value={versionName}
+              onChange={(e) => setVersionName(e.target.value)}
+            />
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => setShowVersionDialog(false)}>Cancel</Button>
+            <Button onClick={handleSaveVersion} color="primary">
+              Save
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </Container>
   );

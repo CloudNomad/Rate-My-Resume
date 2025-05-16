@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 import fitz
 import spacy
@@ -11,6 +11,14 @@ import re
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from collections import defaultdict
+from datetime import datetime
+import uuid
+from sqlalchemy.orm import Session
+import shutil
+from pathlib import Path
+
+from database import get_db
+from models import User, ResumeVersion
 
 load_dotenv()
 
@@ -24,6 +32,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Create uploads directory if it doesn't exist
+UPLOAD_DIR = Path("uploads")
+UPLOAD_DIR.mkdir(exist_ok=True)
 
 # Load spaCy model
 try:
@@ -42,6 +54,15 @@ class ResumeSection(BaseModel):
     score: float
     suggestions: List[str]
     details: Dict[str, any] = {}
+
+class ResumeVersion(BaseModel):
+    id: str
+    user_id: str
+    content: str
+    score: float
+    created_at: datetime
+    version_name: str
+    file_path: str
 
 # Industry-specific keywords and skills
 INDUSTRY_KEYWORDS = {
@@ -85,6 +106,9 @@ ACHIEVEMENT_PATTERNS = {
     'efficiency': r'\d+% efficiency|\d+% improvement',
     'cost': r'\$\d+(?:K|M|B)? savings|\$\d+(?:K|M|B)? reduction'
 }
+
+# In-memory storage for demo (replace with database in production)
+resume_versions = {}
 
 def validate_pdf(file: UploadFile) -> None:
     if not file.filename.endswith('.pdf'):
@@ -416,6 +440,108 @@ async def analyze_resume_endpoint(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail="Internal server error")
+
+@app.post("/save-version")
+async def save_resume_version(
+    file: UploadFile = File(...),
+    user_id: str = None,
+    version_name: str = None,
+    db: Session = Depends(get_db)
+):
+    try:
+        validate_pdf(file)
+        
+        # Save file to disk
+        file_path = UPLOAD_DIR / f"{uuid.uuid4()}.pdf"
+        with open(file_path, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Extract and analyze text
+        text = await asyncio.to_thread(extract_text_from_pdf, file)
+        if not text.strip():
+            raise ResumeAnalysisError("Could not extract text from PDF")
+        
+        analysis = await asyncio.to_thread(analyze_resume, text)
+        
+        # Get or create user
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            user = User(id=user_id, email=f"{user_id}@example.com")
+            db.add(user)
+            db.commit()
+        
+        # Create version
+        version = ResumeVersion(
+            user_id=user.id,
+            content=text,
+            score=analysis["score"],
+            version_name=version_name or f"Version {len(user.versions) + 1}",
+            file_path=str(file_path)
+        )
+        
+        db.add(version)
+        db.commit()
+        db.refresh(version)
+        
+        return {"version_id": version.id, "score": version.score}
+    except Exception as e:
+        if 'file_path' in locals():
+            file_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/versions/{user_id}")
+async def get_resume_versions(user_id: str, db: Session = Depends(get_db)):
+    versions = db.query(ResumeVersion).filter(ResumeVersion.user_id == user_id).all()
+    return sorted(versions, key=lambda x: x.created_at, reverse=True)
+
+@app.get("/compare/{version_id_1}/{version_id_2}")
+async def compare_versions(version_id_1: str, version_id_2: str, db: Session = Depends(get_db)):
+    v1 = db.query(ResumeVersion).filter(ResumeVersion.id == version_id_1).first()
+    v2 = db.query(ResumeVersion).filter(ResumeVersion.id == version_id_2).first()
+    
+    if not v1 or not v2:
+        raise HTTPException(status_code=404, detail="Version not found")
+    
+    # Compare scores
+    score_diff = v2.score - v1.score
+    
+    # Compare sections
+    sections_1 = detect_sections(v1.content)
+    sections_2 = detect_sections(v2.content)
+    
+    changes = {
+        "score_difference": score_diff,
+        "created_at_difference": (v2.created_at - v1.created_at).total_seconds(),
+        "section_changes": {}
+    }
+    
+    # Compare each section
+    for section in set(sections_1.keys()) | set(sections_2.keys()):
+        if section not in sections_1:
+            changes["section_changes"][section] = "Added in new version"
+        elif section not in sections_2:
+            changes["section_changes"][section] = "Removed in new version"
+        elif sections_1[section] != sections_2[section]:
+            changes["section_changes"][section] = "Modified"
+    
+    return changes
+
+@app.delete("/versions/{version_id}")
+async def delete_version(version_id: str, db: Session = Depends(get_db)):
+    version = db.query(ResumeVersion).filter(ResumeVersion.id == version_id).first()
+    if not version:
+        raise HTTPException(status_code=404, detail="Version not found")
+    
+    # Delete file if it exists
+    if version.file_path:
+        try:
+            Path(version.file_path).unlink(missing_ok=True)
+        except Exception as e:
+            print(f"Error deleting file: {e}")
+    
+    db.delete(version)
+    db.commit()
+    return {"message": "Version deleted successfully"}
 
 if __name__ == "__main__":
     import uvicorn

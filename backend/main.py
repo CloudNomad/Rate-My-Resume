@@ -11,11 +11,12 @@ import re
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timedelta
 import uuid
 from sqlalchemy.orm import Session
 import shutil
 from pathlib import Path
+import random
 
 from database import get_db
 from models import User, ResumeVersion
@@ -109,6 +110,9 @@ ACHIEVEMENT_PATTERNS = {
 
 # In-memory storage for demo (replace with database in production)
 resume_versions = {}
+
+# Developer mode flag
+DEV_MODE = os.getenv("DEV_MODE", "false").lower() == "true"
 
 def validate_pdf(file: UploadFile) -> None:
     if not file.filename.endswith('.pdf'):
@@ -542,6 +546,115 @@ async def delete_version(version_id: str, db: Session = Depends(get_db)):
     db.delete(version)
     db.commit()
     return {"message": "Version deleted successfully"}
+
+# Test data generation
+def generate_test_resume() -> str:
+    sections = {
+        "summary": "Experienced software engineer with a passion for building scalable applications.",
+        "experience": """Senior Software Engineer at Tech Corp (2020-2023)
+- Developed and maintained microservices using Python and FastAPI
+- Improved system performance by 40% through optimization
+- Led a team of 5 developers in implementing CI/CD pipelines
+
+Software Engineer at Startup Inc (2018-2020)
+- Built RESTful APIs using Node.js and Express
+- Reduced API response time by 30%
+- Implemented automated testing with 90% coverage""",
+        "education": """Bachelor of Science in Computer Science
+University of Technology, 2014-2018
+GPA: 3.8/4.0""",
+        "skills": """Programming: Python, JavaScript, Java, C++
+Frameworks: React, Django, Spring Boot
+Databases: PostgreSQL, MongoDB
+Tools: Git, Docker, Kubernetes""",
+        "projects": """E-commerce Platform
+- Built a full-stack e-commerce platform using React and Node.js
+- Implemented real-time inventory management
+- Achieved 99.9% uptime
+
+AI Chatbot
+- Developed an NLP-based chatbot using Python
+- Integrated with multiple messaging platforms
+- Handled 10,000+ daily conversations"""
+    }
+    
+    return "\n\n".join(f"{section.upper()}\n{content}" for section, content in sections.items())
+
+def generate_test_versions(user_id: str, count: int = 5, db: Session = None) -> List[ResumeVersion]:
+    versions = []
+    base_score = 75
+    base_date = datetime.utcnow() - timedelta(days=30)
+    
+    for i in range(count):
+        # Generate slightly different content for each version
+        content = generate_test_resume()
+        if i > 0:
+            # Add some random improvements
+            improvements = [
+                "Improved system performance by 50%",
+                "Reduced API response time by 40%",
+                "Implemented automated testing with 95% coverage",
+                "Led a team of 8 developers",
+                "Achieved 99.99% uptime"
+            ]
+            content += f"\n\nAdditional Achievement:\n{random.choice(improvements)}"
+        
+        # Calculate score with some randomness
+        score = min(100, base_score + (i * 5) + random.randint(-2, 2))
+        
+        version = ResumeVersion(
+            user_id=user_id,
+            content=content,
+            score=score,
+            created_at=base_date + timedelta(days=i * 7),
+            version_name=f"Test Version {i + 1}",
+            file_path=None  # No file for test versions
+        )
+        
+        if db:
+            db.add(version)
+            db.commit()
+            db.refresh(version)
+        
+        versions.append(version)
+    
+    return versions
+
+# Developer mode endpoints
+if DEV_MODE:
+    @app.post("/dev/generate-test-data")
+    async def generate_test_data(user_id: str = None, count: int = 5, db: Session = Depends(get_db)):
+        if not user_id:
+            user_id = f"test_user_{uuid.uuid4()}"
+        
+        # Create test user
+        user = User(id=user_id, email=f"{user_id}@example.com")
+        db.add(user)
+        db.commit()
+        
+        # Generate test versions
+        versions = generate_test_versions(user_id, count, db)
+        
+        return {
+            "user_id": user_id,
+            "versions": versions
+        }
+    
+    @app.get("/dev/test-resume")
+    async def get_test_resume():
+        return {
+            "content": generate_test_resume(),
+            "score": random.randint(70, 90)
+        }
+    
+    @app.delete("/dev/clear-test-data")
+    async def clear_test_data(db: Session = Depends(get_db)):
+        # Delete all test users and their versions
+        test_users = db.query(User).filter(User.email.like("test_user_%")).all()
+        for user in test_users:
+            db.delete(user)
+        db.commit()
+        return {"message": "Test data cleared successfully"}
 
 if __name__ == "__main__":
     import uvicorn

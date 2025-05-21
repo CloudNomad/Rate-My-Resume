@@ -1,5 +1,7 @@
 # Rate My Resume
 
+Last automated test: $(date)
+
 An AI-powered web application that analyzes, rates, and provides suggestions for improving resumes.
 
 ## Features

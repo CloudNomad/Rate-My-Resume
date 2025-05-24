@@ -22,6 +22,8 @@ jobs:
           git config --global user.name 'GitHub Actions'
           git config --global user.email 'github-actions@github.com'
           git config --global pull.rebase true
+          git config --global push.default current
+          git config --global core.autocrlf input
           
       - name: Create commit
         id: commit
@@ -45,21 +47,46 @@ jobs:
       - name: Push changes
         if: steps.commit.outcome == 'success'
         run: |
-          # Retry logic for git push
-          MAX_RETRIES=3
-          RETRY_COUNT=0
-          
-          while [ $RETRY_COUNT -lt $MAX_RETRIES ]; do
-            if git pull --rebase && git push origin HEAD:${{ github.ref }}; then
-              echo "Successfully pushed changes"
-              exit 0
-            else
-              RETRY_COUNT=$((RETRY_COUNT + 1))
-              if [ $RETRY_COUNT -eq $MAX_RETRIES ]; then
-                echo "Failed to push after $MAX_RETRIES attempts"
-                exit 1
+          # Function to handle git operations with retries
+          git_operation() {
+            local max_retries=3
+            local retry_count=0
+            local wait_time=10
+            
+            while [ $retry_count -lt $max_retries ]; do
+              if "$@"; then
+                return 0
+              else
+                retry_count=$((retry_count + 1))
+                if [ $retry_count -eq $max_retries ]; then
+                  echo "Operation failed after $max_retries attempts"
+                  return 1
+                fi
+                echo "Operation failed, retrying in ${wait_time} seconds... (Attempt $retry_count of $max_retries)"
+                sleep $wait_time
+                wait_time=$((wait_time * 2))  # Exponential backoff
               fi
-              echo "Push failed, retrying in 10 seconds... (Attempt $RETRY_COUNT of $MAX_RETRIES)"
-              sleep 10
-            fi
-          done 
+            done
+          }
+          
+          # Fetch latest changes
+          echo "Fetching latest changes..."
+          git_operation git fetch origin
+          
+          # Check for conflicts
+          if git merge-base --is-ancestor HEAD origin/${{ github.ref_name }}; then
+            echo "No conflicts detected, proceeding with push"
+          else
+            echo "Potential conflicts detected, attempting to resolve..."
+            git_operation git pull --rebase origin ${{ github.ref_name }}
+          fi
+          
+          # Push changes with retry logic
+          echo "Pushing changes..."
+          if git_operation git push origin HEAD:${{ github.ref }}; then
+            echo "Successfully pushed changes"
+            exit 0
+          else
+            echo "Failed to push changes after all retries"
+            exit 1
+          fi 

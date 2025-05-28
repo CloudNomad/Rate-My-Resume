@@ -24,7 +24,7 @@ async function generateAssets() {
   await gradient
     .composite([{
       input: Buffer.from(
-        `<svg><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="white" font-size="200">RMR</text></svg>`
+        `<svg width="${sizes.icon}" height="${sizes.icon}"><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="white" font-size="200">RMR</text></svg>`
       ),
       gravity: 'center'
     }])
@@ -35,7 +35,7 @@ async function generateAssets() {
     .resize(sizes.splash, sizes.splash)
     .composite([{
       input: Buffer.from(
-        `<svg><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="white" font-size="400">RateMyResume</text></svg>`
+        `<svg width="${sizes.splash}" height="${sizes.splash}"><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="white" font-size="400">RateMyResume</text></svg>`
       ),
       gravity: 'center'
     }])
@@ -45,7 +45,7 @@ async function generateAssets() {
   await gradient
     .composite([{
       input: Buffer.from(
-        `<svg><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="white" font-size="200">RMR</text></svg>`
+        `<svg width="${sizes.adaptive}" height="${sizes.adaptive}"><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="white" font-size="200">RMR</text></svg>`
       ),
       gravity: 'center'
     }])
@@ -56,7 +56,7 @@ async function generateAssets() {
     .resize(sizes.favicon, sizes.favicon)
     .composite([{
       input: Buffer.from(
-        `<svg><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="white" font-size="24">R</text></svg>`
+        `<svg width="${sizes.favicon}" height="${sizes.favicon}"><text x="50%" y="50%" text-anchor="middle" dy=".3em" fill="white" font-size="24">R</text></svg>`
       ),
       gravity: 'center'
     }])

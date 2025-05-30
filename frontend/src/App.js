@@ -29,9 +29,11 @@ import {
   Accordion,
   AccordionSummary,
   AccordionDetails,
+  Alert,
+  Snackbar,
 } from '@mui/material';
 import { Upload as UploadIcon, ExpandMore as ExpandMoreIcon, Code as CodeIcon } from '@mui/icons-material';
-import axios from 'axios';
+import * as api from './services/api';
 
 function App() {
   const [file, setFile] = useState(null);
@@ -55,6 +57,7 @@ function App() {
   const [devMode] = useState(process.env.REACT_APP_DEV_MODE === 'true');
   const [testDataCount, setTestDataCount] = useState(5);
   const [showDevPanel, setShowDevPanel] = useState(false);
+  const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'info' });
 
   const interviewQuestions = {
     technical: {
@@ -127,25 +130,28 @@ function App() {
     }));
   };
 
+  const showSnackbar = (message, severity = 'info') => {
+    setSnackbar({ open: true, message, severity });
+  };
+
+  const handleCloseSnackbar = () => {
+    setSnackbar({ ...snackbar, open: false });
+  };
+
   const handleUpload = async () => {
     if (!file) {
-      setError('Please select a file first');
+      showSnackbar('Please select a file first', 'error');
       return;
     }
 
-    const formData = new FormData();
-    formData.append('file', file);
-
     setLoading(true);
     try {
-      const response = await axios.post('http://localhost:8000/analyze', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      const response = await api.analyzeResume(file);
       setAnalysis(response.data);
+      showSnackbar('Resume analyzed successfully', 'success');
     } catch (err) {
-      setError(err.response?.data?.error || 'An error occurred while analyzing the resume');
+      const errorMessage = err.response?.data?.error || 'An error occurred while analyzing the resume';
+      showSnackbar(errorMessage, 'error');
     } finally {
       setLoading(false);
     }
@@ -154,31 +160,25 @@ function App() {
   const handleSaveVersion = async () => {
     if (!file) return;
     
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('user_id', userId);
-    formData.append('version_name', versionName);
-
     try {
-      const response = await axios.post('http://localhost:8000/save-version', formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-        },
-      });
+      await api.saveVersion(file, userId, versionName);
       setShowVersionDialog(false);
       setVersionName('');
       fetchVersions();
+      showSnackbar('Version saved successfully', 'success');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to save version');
+      const errorMessage = err.response?.data?.detail || 'Failed to save version';
+      showSnackbar(errorMessage, 'error');
     }
   };
 
   const fetchVersions = async () => {
     try {
-      const response = await axios.get(`http://localhost:8000/versions/${userId}`);
+      const response = await api.getVersions(userId);
       setVersions(response.data);
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to fetch versions');
+      const errorMessage = err.response?.data?.detail || 'Failed to fetch versions';
+      showSnackbar(errorMessage, 'error');
     }
   };
 
@@ -186,40 +186,43 @@ function App() {
     if (selectedVersions.length !== 2) return;
     
     try {
-      const response = await axios.get(
-        `http://localhost:8000/compare/${selectedVersions[0]}/${selectedVersions[1]}`
-      );
+      const response = await api.compareVersions(selectedVersions[0], selectedVersions[1]);
       setComparison(response.data);
+      showSnackbar('Versions compared successfully', 'success');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to compare versions');
+      const errorMessage = err.response?.data?.detail || 'Failed to compare versions';
+      showSnackbar(errorMessage, 'error');
     }
   };
 
   const handleDeleteVersion = async (versionId) => {
     try {
-      await axios.delete(`http://localhost:8000/versions/${versionId}`);
+      await api.deleteVersion(versionId);
       fetchVersions();
+      showSnackbar('Version deleted successfully', 'success');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to delete version');
+      const errorMessage = err.response?.data?.detail || 'Failed to delete version';
+      showSnackbar(errorMessage, 'error');
     }
   };
 
   const handleGenerateTestData = async () => {
     try {
-      const response = await axios.post(`http://localhost:8000/dev/generate-test-data?count=${testDataCount}`);
-      setUserId(response.data.user_id);
-      fetchVersions();
+      await api.generateTestData(testDataCount);
+      showSnackbar('Test data generated successfully', 'success');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to generate test data');
+      const errorMessage = err.response?.data?.detail || 'Failed to generate test data';
+      showSnackbar(errorMessage, 'error');
     }
   };
 
   const handleClearTestData = async () => {
     try {
-      await axios.delete('http://localhost:8000/dev/clear-test-data');
-      setVersions([]);
+      await api.clearTestData();
+      showSnackbar('Test data cleared successfully', 'success');
     } catch (err) {
-      setError(err.response?.data?.detail || 'Failed to clear test data');
+      const errorMessage = err.response?.data?.detail || 'Failed to clear test data';
+      showSnackbar(errorMessage, 'error');
     }
   };
 
@@ -703,6 +706,17 @@ function App() {
             </Button>
           </DialogActions>
         </Dialog>
+
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={6000}
+          onClose={handleCloseSnackbar}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+        >
+          <Alert onClose={handleCloseSnackbar} severity={snackbar.severity}>
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
       </Box>
     </Container>
   );
